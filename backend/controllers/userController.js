@@ -41,18 +41,24 @@ const updateUserProfile = async (req, res) => {
 };
 
 const getUserAppliedJobs = async (req, res) => {
-    try {
-      const user = await User.findById(req.user.id).populate('appliedJobs');
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-      const jobs = await Job.find({ applicants: user._id }).populate('company', 'companyName email');
-      res.json(jobs);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: 'Error fetching applied jobs', error: err.message });
-    }
-  };
+  try {
+    const jobs = await Job.find({ 'cvFiles.user': req.user.id }).populate('company', 'companyName email');
+    const appliedJobs = jobs.map(job => {
+      const cvFile = job.cvFiles.find(cv => cv.user.toString() === req.user.id.toString());
+      return {
+        _id: job._id,
+        title: job.title,
+        company: job.company,
+        salary: job.salary,
+        status: cvFile.status,
+      };
+    });
+    res.json(appliedJobs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error fetching applied jobs', error: err.message });
+  }
+};
 module.exports = {
   getUserProfile,
   updateUserProfile,

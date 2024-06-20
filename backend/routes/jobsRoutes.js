@@ -9,7 +9,9 @@ const {
   deleteJob,
   applyJob,
   getApplicants,
-  getJobsByEmail
+  getJobsByEmail,
+  approveApplication,
+  rejectApplication
 } = require('../controllers/jobController');
 
 router.get('/', getJobs);
@@ -20,5 +22,6 @@ router.delete('/:id', authMiddleware('company'), deleteJob);
 router.post('/:id/apply', authMiddleware('user'), applyJob);
 router.get('/:id/applicants', authMiddleware('company'), getApplicants);
 router.get('/my-job/:email', authMiddleware('company'), getJobsByEmail);
-
+router.post('/:jobId/applicants/:userId/approve', authMiddleware('company'), approveApplication);
+router.post('/:jobId/applicants/:userId/reject', authMiddleware('company'), rejectApplication);
 module.exports = router;

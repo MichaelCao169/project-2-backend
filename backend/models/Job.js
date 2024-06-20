@@ -12,7 +12,25 @@ const jobSchema = new mongoose.Schema({
   description: { type: String },
   applicationDeadline: { type: Date, required: true },
   company: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
-  applicants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], 
+  applicants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  cvFiles: [
+    {
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+      filePath: {
+        type: String,
+        required: true,
+      },
+      status: {
+        type: String,
+        enum: ['Pending', 'Approved', 'Rejected'],
+        default: 'Pending',
+      },
+    },
+  ],
+  skills: [{ type: String }],
   createdAt: { type: Date, default: Date.now }
 });
 

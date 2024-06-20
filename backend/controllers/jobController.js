@@ -1,10 +1,11 @@
 const Job = require('../models/Job');
 const Company = require('../models/Company');
-
+const multer = require('multer');
+const path = require('path');
 // Get all jobs
 const getJobs = async (req, res) => {
   try {
-    const jobs = await Job.find().populate('company', 'companyName email companyLogo');
+    const jobs = await Job.find().sort({ createdAt: -1 }).populate('company', 'companyName email companyLogo');
     res.json(jobs);
   } catch (err) {
     console.error(err);
@@ -104,43 +105,28 @@ const deleteJob = async (req, res) => {
   }
 };
 
-// Apply for a job
-const applyJob = async (req, res) => {
-  const { id } = req.params;
 
-  try {
-    const job = await Job.findById(id);
-
-    if (!job) {
-      return res.status(404).json({ message: 'Job not found' });
-    }
-
-    if (job.applicants.includes(req.user.id)) {
-      return res.status(400).json({ message: 'You have already applied for this job' });
-    }
-
-    job.applicants.push(req.user.id);
-    await job.save();
-
-    res.json({ message: 'Applied successfully' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error applying for job', error: err.message });
-  }
-};
 
 // Get applicants for a job
 const getApplicants = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const job = await Job.findById(id).populate('applicants', 'fullName email');
+    const job = await Job.findById(id).populate('cvFiles.user', 'fullName email');
 
     if (!job) {
       return res.status(404).json({ message: 'Job not found' });
     }
 
-    res.json(job.applicants);
+    const applicants = job.cvFiles.map(cvFile => ({
+      _id: cvFile.user._id,
+      fullName: cvFile.user.fullName,
+      email: cvFile.user.email,
+      cvFile: cvFile.filePath,
+      status: cvFile.status,
+    }));
+
+    res.json(applicants);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Error fetching applicants', error: err.message });
@@ -163,7 +149,102 @@ const getJobsByEmail = async (req, res) => {
     res.status(500).json({ message: 'Error fetching jobs', error: err.message });
   }
 };
+// Cấu hình multer để lưu trữ tệp PDF
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname,'..', 'uploads', 'cv')); // Thư mục lưu trữ tệp PDF trong thư mục backend
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
 
+const upload = multer({ storage: storage }).single('cv');
+
+// Apply for a job
+const applyJob = async (req, res) => {
+  upload(req, res, async (err) => {
+    if (err) {
+      return res.status(500).json({ message: 'Error uploading file', error: err.message });
+    }
+
+    const { id } = req.params;
+
+    try {
+      const job = await Job.findById(id);
+
+      if (!job) {
+        return res.status(404).json({ message: 'Job not found' });
+      }
+
+      if (job.applicants.includes(req.user.id)) {
+        return res.status(400).json({ message: 'You have already applied for this job' });
+      }
+
+      job.applicants.push(req.user.id);
+      job.cvFiles.push({
+        user: req.user.id,
+        filePath: path.join('uploads/cv', req.file.filename), // Lưu trữ đường dẫn tệp tương đối
+      });
+      await job.save();
+
+      res.json({ message: 'Applied successfully' });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: 'Error applying for job', error: err.message });
+    }
+  });
+};
+
+// Chấp nhận đơn ứng tuyển
+const approveApplication = async (req, res) => {
+  const { jobId, userId } = req.params;
+
+  try {
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    const cvFile = job.cvFiles.find(cv => cv.user.toString() === userId);
+    if (!cvFile) {
+      return res.status(404).json({ message: 'Applicant not found' });
+    }
+
+    cvFile.status = 'Approved';
+    await job.save();
+
+    res.json({ message: 'Application approved' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error approving application', error: err.message });
+  }
+};
+
+// Từ chối đơn ứng tuyển
+const rejectApplication = async (req, res) => {
+  const { jobId, userId } = req.params;
+
+  try {
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
+    const cvFile = job.cvFiles.find(cv => cv.user.toString() === userId);
+    if (!cvFile) {
+      return res.status(404).json({ message: 'Applicant not found' });
+    }
+
+    cvFile.status = 'Rejected';
+    await job.save();
+
+    res.json({ message: 'Application rejected' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error rejecting application', error: err.message });
+  }
+};
 module.exports = {
   getJobs,
   getJobById,
@@ -173,4 +254,6 @@ module.exports = {
   applyJob,
   getApplicants,
   getJobsByEmail,
+  approveApplication,
+  rejectApplication,
 };
